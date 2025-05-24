@@ -1,0 +1,8 @@
+.env
+*TODO.md
+__pycache__
+/terraform/*
+!/terraform/main.tf
+*.zip
+*.DS_Store
+*old

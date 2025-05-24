@@ -1,0 +1,385 @@
+{
+  "instructions": "Analyze the provided BigQuery job metadata (query, statement type, error, bytes billed, etc.). Evaluate it based on security, readability, cost, performance, and other quality aspects. Provide scores (0-10, where 10 is best; use null if not applicable), recommendations for improvement, a risk level (Low, Medium, High), whether it's safe to run, and a confidence score (0-1) for your analysis.",
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "score": {
+        "type": "object",
+        "description": "Scores for various aspects (0-10, null if N/A).",
+        "properties": {
+          "security": {"type": ["number", "null"], "description": "Score 0-10 for overall security."},
+          "readability": {"type": ["number", "null"], "description": "Score 0-10 for code readability/formatting."},
+          "cost_efficiency": {"type": ["number", "null"], "description": "Score 0-10 for minimizing bytes billed."},
+          "scalability": {"type": ["number", "null"], "description": "Score 0-10 for handling larger data volumes."},
+          "performance": {"type": ["number", "null"], "description": "Score 0-10 for execution speed/efficiency."},
+          "complexity": {"type": ["number", "null"], "description": "Score 0-10 for query complexity (lower score means more complex)."},
+          "modularity": {"type": ["number", "null"], "description": "Score 0-10 for potential reuse/modularity (e.g., using UDFs/views)."},
+          "maintainability": {"type": ["number", "null"], "description": "Score 0-10 for ease of future maintenance."},
+          "commenting": {"type": ["number", "null"], "description": "Score 0-10 for presence and quality of comments."},
+          "data_volume_efficiency": {"type": ["number", "null"], "description": "Score 0-10 for processing only necessary data."},
+          "partition_pruning": {"type": ["number", "null"], "description": "Score 0-10 for effective use of table partitioning."},
+          "sensitive_data_exposure": {"type": ["number", "null"], "description": "Score 0-10 for avoiding PII/sensitive data (lower score means more exposure)."},
+          "null_handling": {"type": ["number", "null"], "description": "Score 0-10 for appropriate handling of NULL values."},
+          "joins_quality": {"type": ["number", "null"], "description": "Score 0-10 for efficiency and correctness of JOINs."}
+        },
+        "required": []
+      },
+      "recommendations": {
+        "type": "array",
+        "items": {"type": "string"},
+        "description": "List of specific recommendations for improving the query."
+      },
+      "risk_level": {
+        "type": "string",
+        "enum": ["Low", "Medium", "High"],
+        "description": "Overall risk level associated with the query (cost, security, performance)."
+      },
+      "is_safe_to_run": {
+        "type": "boolean",
+        "description": "Whether the agent deems the query safe to execute as-is or requires review."
+      },
+      "score_confidence": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1,
+        "description": "Confidence level (0-1) in the provided scores and analysis."
+       }
+    },
+    "required": ["score", "recommendations", "risk_level", "is_safe_to_run", "score_confidence"]
+  },
+  "examples": [
+    {
+      "input": {
+        "query": "/* Simple selection */ SELECT * FROM `my_project.my_dataset.my_table` LIMIT 10",
+        "statement_type": "SELECT",
+        "error_result": null,
+        "total_bytes_billed": 10485760
+      },
+      "output": {
+        "score": { "security": 7, "readability": 8, "cost_efficiency": 6, "scalability": 7, "performance": 7, "complexity": 9, "modularity": 5, "maintainability": 7, "commenting": 7, "data_volume_efficiency": 6, "partition_pruning": null, "sensitive_data_exposure": 7, "null_handling": null, "joins_quality": null },
+        "recommendations": ["Avoid using `SELECT *` in production queries; specify required columns.", "Consider adding more descriptive comments if logic becomes complex."],
+        "risk_level": "Low",
+        "is_safe_to_run": true,
+        "score_confidence": 0.9
+      }
+    },
+    {
+      "input": {
+        "query": "-- Full table scan on large non-partitioned table\nSELECT user_id, event_name, payload FROM `my_project.logs_archive.events_2023_full_np`",
+        "statement_type": "SELECT",
+        "error_result": null,
+        "total_bytes_billed": 5497558138880
+      },
+      "output": {
+        "score": { "security": 6, "readability": 7, "cost_efficiency": 1, "scalability": 2, "performance": 2, "complexity": 8, "modularity": 5, "maintainability": 6, "commenting": 6, "data_volume_efficiency": 1, "partition_pruning": 0, "sensitive_data_exposure": 6, "null_handling": null, "joins_quality": null },
+        "recommendations": ["Add a `WHERE` clause to filter data, especially on date/time.", "Query a partitioned version of the table if available.", "Avoid selecting large payload columns if not needed.", "Consider adding a `LIMIT` clause during exploration."],
+        "risk_level": "High",
+        "is_safe_to_run": false,
+        "score_confidence": 0.95
+      }
+    },
+    {
+      "input": {
+        "query": "select uid, dob, mail from customer_pii_table where country='US'",
+        "statement_type": "SELECT",
+        "error_result": null,
+        "total_bytes_billed": 52428800
+      },
+      "output": {
+        "score": { "security": 1, "readability": 4, "cost_efficiency": 8, "scalability": 8, "performance": 8, "complexity": 8, "modularity": 5, "maintainability": 5, "commenting": 2, "data_volume_efficiency": 7, "partition_pruning": null, "sensitive_data_exposure": 1, "null_handling": null, "joins_quality": null },
+        "recommendations": ["CRITICAL: Query selects potential PII (dob, mail). Avoid selecting sensitive columns.", "Implement data masking or use authorized views.", "Use meaningful aliases (uid, mail).", "Add comments explaining the purpose and justification for accessing this data.", "Format query for better readability."],
+        "risk_level": "High",
+        "is_safe_to_run": false,
+        "score_confidence": 0.98
+      }
+    },
+    {
+      "input": {
+        "query": "SELECT\n  t1.a, t1.b, t2.c, t3.d\nFROM\n  table1 t1 JOIN table2 t2 ON t1.id = t2.fkid\n  LEFT JOIN table3 t3 ON t2.id = t3.fkid\nWHERE\n  t1.date > '2023-01-01' AND t2.status = 'active'\nORDER BY\n  t1.a DESC",
+        "statement_type": "SELECT",
+        "error_result": null,
+        "total_bytes_billed": 1073741824
+      },
+      "output": {
+        "score": { "security": 8, "readability": 6, "cost_efficiency": 7, "scalability": 7, "performance": 7, "complexity": 6, "modularity": 6, "maintainability": 6, "commenting": 3, "data_volume_efficiency": 7, "partition_pruning": null, "sensitive_data_exposure": 8, "null_handling": 7, "joins_quality": 7 },
+        "recommendations": ["Add comments explaining the purpose of the query and joins.", "Consider using more descriptive aliases than t1, t2, t3.", "Ensure indexes or partitioning are appropriate for join keys (id, fkid) and filter columns (date, status) for large tables."],
+        "risk_level": "Medium",
+        "is_safe_to_run": true,
+        "score_confidence": 0.85
+      }
+    },
+     {
+      "input": {
+        "query": "SELEC user_name FROM `my_project.my_data.users` WHERE registration_date < '202-01-01'",
+        "statement_type": "SELECT",
+        "error_result": {
+            "reason": "invalidQuery",
+            "location": "query",
+            "message": "Syntax error: Unexpected identifier 'user_name' at [1:7]"
+        },
+        "total_bytes_billed": 0
+      },
+      "output": {
+        "score": { "security": null, "readability": 1, "cost_efficiency": 10, "scalability": null, "performance": null, "complexity": null, "modularity": null, "maintainability": 1, "commenting": 0, "data_volume_efficiency": null, "partition_pruning": null, "sensitive_data_exposure": null, "null_handling": null, "joins_quality": null },
+        "recommendations": ["Fix syntax error: 'SELEC' should be 'SELECT'.", "Verify the date format '202-01-01' is intended; likely typo for '2024-01-01'?"],
+        "risk_level": "Low",
+        "is_safe_to_run": false,
+        "score_confidence": 0.99
+      }
+    },
+    {
+      "input": {
+        "query": "-- Well-optimized query using partitioning\nSELECT\n    repo.name,\n    count(distinct actor.login) as committers\nFROM `githubarchive.day.events_*` -- Uses wildcard, implicitly partitioned\nWHERE _TABLE_SUFFIX BETWEEN '20240101' AND '20240131'\nAND type = 'PushEvent'\nGROUP BY 1\nORDER BY 2 DESC\nLIMIT 100;",
+        "statement_type": "SELECT",
+        "error_result": null,
+        "total_bytes_billed": 53687091200
+      },
+      "output": {
+        "score": { "security": 9, "readability": 9, "cost_efficiency": 8, "scalability": 9, "performance": 8, "complexity": 7, "modularity": 7, "maintainability": 9, "commenting": 8, "data_volume_efficiency": 8, "partition_pruning": 9, "sensitive_data_exposure": 9, "null_handling": 8, "joins_quality": null },
+        "recommendations": ["Query appears well-optimized using partitioning via _TABLE_SUFFIX.", "Consider adding database/project context in comments if shared widely."],
+        "risk_level": "Low",
+        "is_safe_to_run": true,
+        "score_confidence": 0.92
+      }
+    },
+    {
+      "input": {
+        "query": "/*\nThis query is meant to find inactive users.\nIt joins users with their last login event.\nIt's complex because of the join and aggregation.\nWe are selecting all columns from the users table.\nPotentially expensive on large tables.\n*/\nSELECT\n    u.*,\n    last_login.event_time\nFROM\n    `my_project.user_data.users` u\nLEFT JOIN (\n    -- This subquery finds the latest login for each user\n    SELECT user_id, MAX(event_timestamp) as event_time\n    FROM `my_project.logs_archive.login_events` -- This table is huge!\n    GROUP BY user_id\n) last_login ON u.user_id = last_login.user_id\nWHERE\n    last_login.event_time IS NULL -- User never logged in\n    OR last_login.event_time < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 YEAR); -- Last login over a year ago",
+        "statement_type": "SELECT",
+        "error_result": null,
+        "total_bytes_billed": 2199023255552
+      },
+      "output": {
+        "score": { "security": 7, "readability": 6, "cost_efficiency": 4, "scalability": 5, "performance": 5, "complexity": 4, "modularity": 4, "maintainability": 5, "commenting": 9, "data_volume_efficiency": 4, "partition_pruning": 3, "sensitive_data_exposure": 7, "null_handling": 9, "joins_quality": 5 },
+        "recommendations": [
+          "The subquery scans the entire large `login_events` table. Consider if this table is partitioned by date/time and add a filter to the subquery.",
+          "Avoid `SELECT u.*` if possible; specify only necessary columns from the users table.",
+          "The subquery could be replaced or optimized using window functions if the `login_events` table is ordered and partitioned correctly.",
+          "While comments are good, the underlying query structure is inefficient for large log tables."
+        ],
+        "risk_level": "Medium",
+        "is_safe_to_run": true,
+        "score_confidence": 0.88
+      }
+    },
+    {
+      "input": {
+        "query": "SELECT sum(revenue) / count(orders) as avg_order_value FROM `my_project.sales_data.orders` WHERE order_date >= '2024-01-01'",
+        "statement_type": "SELECT",
+        "error_result": null,
+        "total_bytes_billed": 536870912
+      },
+      "output": {
+        "score": { "security": 8, "readability": 8, "cost_efficiency": 8, "scalability": 8, "performance": 8, "complexity": 8, "modularity": 7, "maintainability": 8, "commenting": 6, "data_volume_efficiency": 8, "partition_pruning": 8, "sensitive_data_exposure": 8, "null_handling": 6, "joins_quality": null },
+        "recommendations": [
+          "Consider using SAFE_DIVIDE() instead of / to handle cases where count(orders) might be 0, which would otherwise result in division by zero error."
+        ],
+        "risk_level": "Low",
+        "is_safe_to_run": true,
+        "score_confidence": 0.9
+      }
+    },
+    {
+      "input": {
+        "query": "SELECT customer_id, full_name, email\nFROM `my_project.crm.customers` c\nJOIN `my_project.sales_data.transactions` t ON c.customer_id = t.cust_id -- Note: different column name for customer ID\nWHERE t.transaction_date >= '2023-01-01'",
+        "statement_type": "SELECT",
+        "error_result": null,
+        "total_bytes_billed": 8796093022208
+      },
+      "output": {
+        "score": { "security": 6, "readability": 7, "cost_efficiency": 2, "scalability": 3, "performance": 3, "complexity": 7, "modularity": 5, "maintainability": 6, "commenting": 4, "data_volume_efficiency": 2, "partition_pruning": null, "sensitive_data_exposure": 5, "null_handling": null, "joins_quality": 3 },
+        "recommendations": [
+          "The join condition `c.customer_id = t.cust_id` might be inefficient if tables are very large and not clustered or partitioned on these keys.",
+          "Ensure the `transactions` table is partitioned by `transaction_date` to leverage partition pruning with the WHERE clause.",
+          "Consider if `full_name` and `email` are necessary; these might be sensitive fields.",
+          "Add comments explaining the join logic, especially the different column names (`customer_id` vs `cust_id`)."
+        ],
+        "risk_level": "High",
+        "is_safe_to_run": false,
+        "score_confidence": 0.93
+      }
+    },
+    {
+      "input": {
+        "query": "SELECT\n  order_id, item.sku, item.price\nFROM\n  `my_project.sales.orders_with_items`,\n  UNNEST(items) as item\nWHERE\n  order_date = CURRENT_DATE()",
+        "statement_type": "SELECT",
+        "error_result": null,
+        "total_bytes_billed": 2147483648
+      },
+      "output": {
+        "score": { "security": 8, "readability": 8, "cost_efficiency": 6, "scalability": 7, "performance": 7, "complexity": 7, "modularity": 6, "maintainability": 7, "commenting": 7, "data_volume_efficiency": 6, "partition_pruning": 7, "sensitive_data_exposure": 8, "null_handling": 8, "joins_quality": null },
+        "recommendations": [
+          "Query on a date-partitioned table using `CURRENT_DATE()` is good for pruning.",
+          "Processing large arrays (`UNNEST`) can still be computationally intensive and impact cost/performance depending on array size.",
+          "Ensure the `items` array doesn't contain sensitive information if not intended."
+        ],
+        "risk_level": "Medium",
+        "is_safe_to_run": true,
+        "score_confidence": 0.88
+      }
+    },
+    {
+      "input": {
+        "query": "-- Complex query using CTEs\nWITH user_sessions AS (\n  SELECT\n    user_id,\n    session_id,\n    MIN(event_timestamp) as session_start,\n    MAX(event_timestamp) as session_end\n  FROM `my_project.analytics.events`\n  WHERE event_date BETWEEN '2024-01-01' AND '2024-01-31'\n  GROUP BY 1, 2\n),\nengaged_users AS (\n  SELECT\n    user_id\n  FROM user_sessions\n  WHERE TIMESTAMP_DIFF(session_end, session_start, MINUTE) > 10 -- sessions longer than 10 minutes\n  GROUP BY 1\n  HAVING count(session_id) >= 2 -- at least 2 engaged sessions\n)\nSELECT\n  u.user_id, u.registration_date\nFROM `my_project.user_data.users` u\nJOIN engaged_users eu ON u.user_id = eu.user_id;",
+        "statement_type": "SELECT",
+        "error_result": null,
+        "total_bytes_billed": 3298534883328
+      },
+      "output": {
+        "score": { "security": 8, "readability": 8, "cost_efficiency": 5, "scalability": 6, "performance": 6, "complexity": 3, "modularity": 8, "maintainability": 7, "commenting": 7, "data_volume_efficiency": 5, "partition_pruning": 7, "sensitive_data_exposure": 7, "null_handling": 8, "joins_quality": 7 },
+        "recommendations": [
+          "Using CTEs improves readability and modularity.",
+          "The initial scan of the `events` table is filtered by date, leveraging partitioning, but grouping/aggregating on session_id can still be resource-intensive.",
+          "Ensure joins are efficient, especially the final join with the `users` table.",
+          "Consider clustering the `events` table by `user_id` and `session_id` if this pattern is common."
+        ],
+        "risk_level": "Medium",
+        "is_safe_to_run": true,
+        "score_confidence": 0.9
+      }
+    },
+     {
+      "input": {
+        "query": "SELECT DISTINCT customer_email FROM `my_project.crm.customers_large`",
+        "statement_type": "SELECT",
+        "error_result": null,
+        "total_bytes_billed": 6597069766656
+      },
+      "output": {
+        "score": { "security": 4, "readability": 8, "cost_efficiency": 2, "scalability": 4, "performance": 4, "complexity": 8, "modularity": 5, "maintainability": 7, "commenting": 6, "data_volume_efficiency": 2, "partition_pruning": null, "sensitive_data_exposure": 2, "null_handling": null, "joins_quality": null },
+        "recommendations": [
+          "Selecting `DISTINCT` on a high-cardinality column like email from a very large table is computationally expensive and bills against the full table size.",
+          "Email addresses are sensitive data; ensure proper access controls and masking are in place.",
+          "If frequent distinct counts are needed, consider pre-aggregating or using approximate aggregate functions like `APPROX_COUNT_DISTINCT` if precision isn't critical (Note: This query selects the values, not just the count).",
+          "If filtering is possible, add a WHERE clause to reduce the data scanned."
+        ],
+        "risk_level": "High",
+        "is_safe_to_run": false,
+        "score_confidence": 0.94
+      }
+    },
+    {
+      "input": {
+        "query": "SELECT *\nFROM `my_project.data.table_a` a, `my_project.data.table_b` b\nWHERE a.id = b.id AND a.process_date = '2024-03-15'",
+        "statement_type": "SELECT",
+        "error_result": null,
+        "total_bytes_billed": 13194139533312
+      },
+      "output": {
+        "score": { "security": 7, "readability": 5, "cost_efficiency": 1, "scalability": 2, "performance": 1, "complexity": 7, "modularity": 5, "maintainability": 5, "commenting": 3, "data_volume_efficiency": 1, "partition_pruning": null, "sensitive_data_exposure": 7, "null_handling": null, "joins_quality": 1 },
+        "recommendations": [
+          "Avoid using the implicit `FROM table_a, table_b` syntax as it performs a CROSS JOIN before filtering, leading to massive data processing.",
+          "Rewrite using explicit `JOIN` syntax: `FROM table_a a JOIN table_b b ON a.id = b.id WHERE a.process_date = '2024-03-15'`.",
+          "Ensure tables are partitioned/clustered on join and filter keys (`id`, `process_date`) for performance.",
+          "Avoid `SELECT *`; specify needed columns."
+        ],
+        "risk_level": "High",
+        "is_safe_to_run": false,
+        "score_confidence": 0.96
+      }
+    },
+    {
+      "input": {
+        "query": "SELECT user_id, purchase_amount\nFROM `my_project.sales.transactions_partitioned`\nWHERE user_id = 'user123'",
+        "statement_type": "SELECT",
+        "error_result": null,
+        "total_bytes_billed": 4398046511104
+      },
+      "output": {
+        "score": { "security": 8, "readability": 8, "cost_efficiency": 3, "scalability": 4, "performance": 4, "complexity": 8, "modularity": 7, "maintainability": 7, "commenting": 6, "data_volume_efficiency": 3, "partition_pruning": 1, "sensitive_data_exposure": 8, "null_handling": null, "joins_quality": null },
+        "recommendations": [
+          "Table `transactions_partitioned` is likely partitioned by date/time, but the filter is on `user_id`.",
+          "Filtering *only* on a non-partitioning column like `user_id` will still result in a full scan of all partitions.",
+          "If filtering by user is common, consider clustering the table by `user_id` or ensure filters include the partition column (e.g., `WHERE _PARTITIONDATE >= 'YYYY-MM-DD' AND user_id = 'user123'`)."
+        ],
+        "risk_level": "Medium",
+        "is_safe_to_run": true,
+        "score_confidence": 0.91
+      }
+    },
+    {
+      "input": {
+        "query": "SELECT DISTINCT category, COUNT(*) FROM `my_project.product_catalog.products` GROUP BY 1",
+        "statement_type": "SELECT",
+        "error_result": {
+          "reason": "notFound",
+          "location": "table",
+          "message": "Not found: Table my_project.product_catalog.products was not found in location US"
+        },
+        "total_bytes_billed": 0
+      },
+      "output": {
+        "score": { "security": null, "readability": 8, "cost_efficiency": 10, "scalability": null, "performance": null, "complexity": null, "modularity": null, "maintainability": 3, "commenting": 5, "data_volume_efficiency": null, "partition_pruning": null, "sensitive_data_exposure": null, "null_handling": null, "joins_quality": null },
+        "recommendations": [
+          "Fix error: Table `my_project.product_catalog.products` was not found.",
+          "Verify the dataset/table name and project ID are correct.",
+          "Ensure the table exists in the specified location (US)."
+        ],
+        "risk_level": "Low",
+        "is_safe_to_run": false,
+        "score_confidence": 0.97
+      }
+    },
+    {
+      "input": {
+        "query": "SELECT user_id, `my_project.my_dataset.udf_mask_email`(email) as masked_email FROM `my_project.user_data.users_large` WHERE signup_date > '2023-01-01'",
+        "statement_type": "SELECT",
+        "error_result": null,
+        "total_bytes_billed": 1099511627776
+      },
+      "output": {
+        "score": { "security": 6, "readability": 8, "cost_efficiency": 6, "scalability": 7, "performance": 6, "complexity": 8, "modularity": 7, "maintainability": 7, "commenting": 7, "data_volume_efficiency": 7, "partition_pruning": 7, "sensitive_data_exposure": 6, "null_handling": 7, "joins_quality": null },
+        "recommendations": [
+          "The query uses a UDF (`udf_mask_email`). The performance, cost, and exact security implications depend heavily on the UDF's internal logic, which is not visible here.",
+          "Ensure the UDF is efficient, especially when applied to a large number of rows.",
+          "Verify the UDF handles potential NULL inputs correctly.",
+          "The `users_large` table should be partitioned/clustered on `signup_date` for efficient filtering."
+        ],
+        "risk_level": "Medium",
+        "is_safe_to_run": true,
+        "score_confidence": 0.7
+      }
+    },
+    {
+      "input": {
+        "query": "SELECT\n  customer_id,\n  (SELECT MAX(transaction_timestamp) FROM `my_project.sales.transactions` WHERE customer_id = t.customer_id) as last_transaction_time,\n  (SELECT COUNT(*) FROM `my_project.sales.transactions` WHERE customer_id = t.customer_id AND transaction_timestamp >= '2024-01-01') as transactions_in_2024\nFROM `my_project.crm.customers_large` t\nWHERE country = 'CA'",
+        "statement_type": "SELECT",
+        "error_result": null,
+        "total_bytes_billed": 15393164883968
+      },
+      "output": {
+        "score": { "security": 8, "readability": 5, "cost_efficiency": 1, "scalability": 2, "performance": 1, "complexity": 2, "modularity": 4, "maintainability": 4, "commenting": 5, "data_volume_efficiency": 1, "partition_pruning": null, "sensitive_data_exposure": 8, "null_handling": 7, "joins_quality": 1 },
+        "recommendations": [
+          "Correlated subqueries (subqueries that refer to the outer query's table, like `WHERE customer_id = t.customer_id`) are highly inefficient, especially on large tables.",
+          "This pattern effectively scans the `transactions` table for *each* customer in the outer query, leading to extremely high bytes billed.",
+          "Rewrite this query using `GROUP BY` and `JOIN` or window functions for vastly improved performance and cost efficiency.",
+          "Ensure the `transactions` table is partitioned/clustered by `customer_id` and `transaction_timestamp`.",
+          "Add comments explaining the logic, although rewriting is the primary recommendation."
+        ],
+        "risk_level": "High",
+        "is_safe_to_run": false,
+        "score_confidence": 0.75
+      }
+    },
+    {
+      "input": {
+        "query": "SELECT user_id, COUNT(*) as login_count\nFROM `my_project.logs.login_events_partitioned`\nWHERE event_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)\nGROUP BY user_id",
+        "statement_type": "SELECT",
+        "error_result": null,
+        "total_bytes_billed": 8796093022208
+      },
+      "output": {
+        "score": { "security": 8, "readability": 8, "cost_efficiency": 6, "scalability": 6, "performance": 6, "complexity": 7, "modularity": 7, "maintainability": 8, "commenting": 7, "data_volume_efficiency": 6, "partition_pruning": 8, "sensitive_data_exposure": 8, "null_handling": 8, "joins_quality": null },
+        "recommendations": [
+          "The query correctly uses partition pruning based on the timestamp filter.",
+          "Performance can still be impacted if there is significant data skew in `user_id` (a few users have a massive number of login events).",
+          "Consider clustering the table by `user_id` if skew is a known issue and grouping/aggregating by user is common.",
+          "If exact count is not needed, consider using `APPROX_COUNT_DISTINCT` on `event_timestamp` per user or analyzing distribution without full count."
+        ],
+        "risk_level": "Medium",
+        "is_safe_to_run": true,
+        "score_confidence": 0.65
+      }
+    }
+  ]
+}

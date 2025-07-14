@@ -115,10 +115,15 @@ Personalized reports empower individual data practitioners with tailored feedbac
 
 Below you can find a sample user report, including a **spider graph** of performance metrics and **trendlines** showing historical improvement, divided into several key sections:
 
+<details>
+<summary>Example</summary>
+
 > ![User Report Example - part 1](examples/user_report/cards.png)
 > ![User Report Example - part 2](examples/user_report/spider_graph.png)
 > ![User Report Example - part 3](examples/user_report/trendlines_summary.png)
 > ![User Report Example - part 4](examples/user_report/improvements_urls.png)
+
+</details>
 
 ### 📊 Developer Reports
 
@@ -126,4 +131,9 @@ Developer reports provide platform administrators and data leads with a high-lev
 
 See a sample developer activity summary below:
 
+<details>
+<summary>Example</summary>
+
 > ![Developers Report Example](examples/developers_report/summary.png)
+
+</details>
